@@ -4,33 +4,35 @@ import sys
 import os
 import imageio.v2
 
-if len(sys.argv) != 5:
-    print('Usage: python3 plot.py <method> <dt> <total_frames> <frame_rate>')
+if len(sys.argv) != 3:
+    print('Usage: python3 plot.py <method> <dt>')
     sys.exit(1)
 
 method = sys.argv[1]
 dt = sys.argv[2]
-totalframes = int(sys.argv[3])
-framerate = int(sys.argv[4])
-
-U = np.zeros((totalframes, 100, 100))
-t = np.zeros(totalframes)
-
-filename = f'fhn-{method}-{dt}.txt'
-timesfile = f'sim-times-{method}-{dt}.txt'
 
 # Read data from files
+
+t = []
+timesfile = f'sim-times-{method}-{dt}.txt'
+with open(timesfile, 'r') as f:
+    lines = f.readlines()
+    for line in lines:
+        t.append(float(line))
+
+totalframes = len(t)
+
+filename = f'fhn-{method}-{dt}.txt'
+U = np.zeros((totalframes, 100, 100))
 with open(filename, 'r') as f:
     for n in range(totalframes):
         for i in range(len(U[0])):
             for j in range(len(U[0])):
                 U[n][i][j] = float(f.readline())
 
-with open(timesfile, 'r') as f:
-    for n in range(totalframes):
-        t[n] = float(f.readline())
 
 # Make plots
+framerate = int(totalframes / 100)
 plots = []
 for n in range(len(U)):
     if n % framerate == 0:

@@ -67,9 +67,9 @@ void thomas_algorithm(double *d, double *solution, unsigned long N, double alpha
     free(d_);
 }
 
-double reaction_v(double v, double I_stim)
+double reaction_v(double v, double w)
 {
-    return -G * v * (1.0 - (v / vth)) * (1.0 - (v / vp)) + I_stim;
+    return (-G * v * (1.0 - (v / vth)) * (1.0 - (v / vp))) + (-eta1 * v * w);
 }
 
 double reaction_w(double v, double w)
@@ -112,7 +112,7 @@ int main(int argc, char *argv[])
 {
     if (argc != 4)
     {
-        printf("Usage: %s <num_threads> <delta_t (ms)> <method>", argv[0]);
+        printf("Usage: %s <num_threads> <delta_t (ms)> <method>\n", argv[0]);
         exit(1);
     }
 
@@ -155,7 +155,7 @@ int main(int argc, char *argv[])
         solution[i] = (double *)malloc(N * sizeof(double));
     }
 
-    double A_v, dv_dt, dw_dt, exp_diff_term = 0.0;
+    double dv_dt, dw_dt, exp_diff_term = 0.0;
 
     int step = 0;
     double tstep = 0.0;
@@ -225,7 +225,7 @@ int main(int argc, char *argv[])
     if (strcmp(method, "ADI1") == 0)
     {
         #pragma omp parallel num_threads(num_threads) default(none) \
-        private(i, j, I_stim, A_v, dv_dt, dw_dt, exp_diff_term) \
+        private(i, j, I_stim, dv_dt, dw_dt, exp_diff_term) \
         shared(v, w, N, M, dx, dy, dt, G, eta1, eta2, eta3, vth, vp, ga, chi, Cm, \
         stim_strength, t_s1_begin, stim_duration, x_lim, t_s2_begin, stim2_duration, \
         x_max, y_max, x_min, y_min, fp_all, fp_times, time, tag, count, \
@@ -257,15 +257,12 @@ int main(int argc, char *argv[])
                             I_stim = 0.0;
                         }
 
-                        // Get A_v and dv_dt
-                        A_v = -eta1 * v[i][j] * w[i][j];
-                        dv_dt = reaction_v(v[i][j], I_stim);
-
-                        // Get dw_dt
+                        // Get dv_dt and dw_dt
+                        dv_dt = reaction_v(v[i][j], w[i][j]) + I_stim;
                         dw_dt = reaction_w(v[i][j], w[i][j]);
                         
                         // Update v and w
-                        v_tilde[i][j] = v[i][j] + dt * (A_v + dv_dt);
+                        v_tilde[i][j] = v[i][j] + dt * dv_dt;
                         w[i][j] = w[i][j] + dt * dw_dt;
 
                         // Update rightside for Thomas algorithm
@@ -346,7 +343,7 @@ int main(int argc, char *argv[])
     else if (strcmp(method, "ADI2") == 0)
     {
         #pragma omp parallel num_threads(num_threads) default(none) \
-        private(i, j, I_stim, A_v, dv_dt, dw_dt, exp_diff_term) \
+        private(i, j, I_stim, dv_dt, dw_dt, exp_diff_term) \
         shared(v, w, N, M, dx, dy, dt, G, eta1, eta2, eta3, vth, vp, ga, chi, Cm, \
         stim_strength, t_s1_begin, stim_duration, x_lim, t_s2_begin, stim2_duration, \
         x_max, y_max, x_min, y_min, fp_all, fp_times, time, tag, count, \
@@ -378,22 +375,19 @@ int main(int argc, char *argv[])
                             I_stim = 0.0;
                         }
 
-                        // Get A_v and dv_dt
-                        A_v = -eta1 * v[i][j] * w[i][j];
-                        dv_dt = reaction_v(v[i][j], I_stim);
-
-                        // Get dw_dt
+                        // Get dv_dt and dw_dt
+                        dv_dt = reaction_v(v[i][j], w[i][j]) + I_stim;
                         dw_dt = reaction_w(v[i][j], w[i][j]);
                         
                         // Update v_tilde and w_tilde
-                        v_tilde[i][j] = v[i][j] + (dt * 0.5) * (A_v + dv_dt);
+                        v_tilde[i][j] = v[i][j] + ((phi * 0.5) * ((v[i-1][j] - 2.0*v[i][j] + v[i+1][j]) + (v[i][j-1] - 2.0*v[i][j] + v[i][j+1]))) + (dt * 0.5 * dv_dt);
                         w_tilde[i][j] = w[i][j] + (dt * 0.5) * dw_dt;
 
                         // Update w
                         w[i][j] = w[i][j] + dt * reaction_w(v_tilde[i][j], w_tilde[i][j]);      // ??? usa v_tilde ou vij?
 
                         // Update r_v for Thomas algorithm
-                        r_v[i][j] = 0.5 * dt * reaction_v(v_tilde[i][j], I_stim);
+                        r_v[i][j] = 0.5 * dt * (reaction_v(v_tilde[i][j], w_tilde[i][j]) + I_stim);
                     }
                 }
                 
@@ -460,7 +454,7 @@ int main(int argc, char *argv[])
                         }
 
                         // Update rightside
-                        rightside[i][j] = exp_diff_term + r_v[i][j];
+                        rightside[i][j] = exp_diff_term + 0.5 * dt * r_v[i][j];
                     }
                 }
                 
@@ -522,7 +516,7 @@ int main(int argc, char *argv[])
     else if (strcmp(method, "FE") == 0)
     {
         #pragma omp parallel num_threads(num_threads) default(none) \
-        private(i, j, I_stim, A_v, dv_dt, dw_dt, exp_diff_term) \
+        private(i, j, I_stim, dv_dt, dw_dt, exp_diff_term) \
         shared(v, w, N, M, dx, dy, dt, G, eta1, eta2, eta3, vth, vp, ga, chi, Cm, \
         stim_strength, t_s1_begin, stim_duration, x_lim, t_s2_begin, stim2_duration, \
         x_max, y_max, x_min, y_min, fp_all, fp_times, time, tag, count, \
@@ -554,15 +548,12 @@ int main(int argc, char *argv[])
                             I_stim = 0.0;
                         }
 
-                        // Get A_v and dv_dt
-                        A_v = -eta1 * v[i][j] * w[i][j];
-                        dv_dt = reaction_v(v[i][j], I_stim);
-
-                        // Get dw_dt
+                        // Get dv_dt and dw_dt
+                        dv_dt = reaction_v(v[i][j], w[i][j]) + I_stim;
                         dw_dt = reaction_w(v[i][j], w[i][j]);
                         
                         // Update v and w
-                        v_tilde[i][j] = v[i][j] + dt * (A_v + dv_dt);
+                        v_tilde[i][j] = v[i][j] + dt * dv_dt;
                         w[i][j] = w[i][j] + dt * dw_dt;
                     }
                 }
