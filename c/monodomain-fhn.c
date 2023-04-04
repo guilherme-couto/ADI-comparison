@@ -15,15 +15,15 @@ FISIOCOMP - UFJF
 Model parameters
 Based on Gerardo_Giorda 2007
 -----------------------------------------------------*/
-double G = 1.5;
-double eta1 = 4.4;
-double eta2 = 0.012;
-double eta3 = 1.0;
-double vth = 13.0;
-double vp = 100.0;
-double ga = 1.2e-3;
-double chi = 1.0e3;
-double Cm = 1.0e-3;
+double G = 1.5;         // omega^-1 * cm^-2
+double eta1 = 4.4;      // omega^-1 * cm^-1
+double eta2 = 0.012;    // dimensionless
+double eta3 = 1.0;      // dimensionless
+double vth = 13.0;      // mV
+double vp = 100.0;      // mV
+double ga = 1.2e-3;     // omega^-1 * cm^-1
+double chi = 1.0e3;     // cm^-1
+double Cm = 1.0e-3;     // mF * cm^-2
 
 /*-----------------------------------------------------
 Auxiliary functions
@@ -125,7 +125,7 @@ int main(int argc, char *argv[])
         fprintf(stderr, "Number of threads must greater than 0\n");
         exit(1);
     }
-    if (strcmp(method, "ADI1") != 0 && strcmp(method, "ADI2") != 0)
+    if (strcmp(method, "ADI1") != 0 && strcmp(method, "ADI2") != 0 && strcmp(method, "FE") != 0)
     {
         fprintf(stderr, "Method must be ADI1 (first order) or ADI2 (second order)\n");
         exit(1);
@@ -221,8 +221,129 @@ int main(int argc, char *argv[])
 
     start = omp_get_wtime();
 
+    // ADI first order
+    if (strcmp(method, "ADI1") == 0)
+    {
+        #pragma omp parallel num_threads(num_threads) default(none) \
+        private(i, j, I_stim, A_v, dv_dt, dw_dt, exp_diff_term) \
+        shared(v, w, N, M, dx, dy, dt, G, eta1, eta2, eta3, vth, vp, ga, chi, Cm, \
+        stim_strength, t_s1_begin, stim_duration, x_lim, t_s2_begin, stim2_duration, \
+        x_max, y_max, x_min, y_min, fp_all, fp_times, time, tag, count, \
+        v_tilde, w_tilde, phi, T, tstep, step, r_v, rightside, solution)
+        {
+            while (step < M)
+            {
+                // Get time step
+                tstep = time[step];
+
+                // Predict v_tilde and w_tilde with explicit method
+                #pragma omp for collapse(2) nowait
+                for (i = 1; i < N-1; i++)
+                {
+                    for (j = 1; j < N-1; j++)
+                    {
+                        // Stimulus 1
+                        if (tstep >= t_s1_begin && tstep <= t_s1_begin + stim_duration && j <= x_lim)
+                        {
+                            I_stim = stim_strength;
+                        }
+                        // Stimulus 2
+                        else if (tstep >= t_s2_begin && tstep <= t_s2_begin + stim2_duration && j >= x_min && j <= x_max && i >= y_min && i <= y_max)
+                        {
+                            I_stim = stim_strength;
+                        }
+                        else 
+                        {
+                            I_stim = 0.0;
+                        }
+
+                        // Get A_v and dv_dt
+                        A_v = -eta1 * v[i][j] * w[i][j];
+                        dv_dt = reaction_v(v[i][j], I_stim);
+
+                        // Get dw_dt
+                        dw_dt = reaction_w(v[i][j], w[i][j]);
+                        
+                        // Update v and w
+                        v_tilde[i][j] = v[i][j] + dt * (A_v + dv_dt);
+                        w[i][j] = w[i][j] + dt * dw_dt;
+
+                        // Update rightside for Thomas algorithm
+                        rightside[j][i] = v_tilde[i][j];
+                    }
+                }
+                
+                // Diffusion
+                // 1st: Implicit y-axis diffusion (lines)
+                #pragma omp barrier
+                #pragma omp for nowait
+                for (i = 1; i < N-1; i++)
+                {
+                    thomas_algorithm(rightside[i], solution[i], N-2, phi);
+
+                    // Update v
+                    for (j = 1; j < N-1; j++)
+                    {
+                        v_tilde[j][i] = solution[i][j];
+                    }
+                }
+
+                // 2nd: Implicit x-axis diffusion (columns)
+                #pragma omp barrier
+                #pragma omp for nowait
+                for (i = 1; i < N-1; i++)
+                {
+                    thomas_algorithm(v_tilde[i], v[i], N-2, phi);
+                }
+
+                // Boundary conditions
+                #pragma omp for nowait
+                for (i = 0; i < N; i++)
+                {
+                    v[i][0] = v[i][1];
+                    v[i][N-1] = v[i][N-2];
+                    v[0][i] = v[1][i];
+                    v[N-1][i] = v[N-2][i];
+                }
+
+                // Save data to file
+                #pragma omp master
+                {
+                    // Write to file
+                    if (step % 20 == 0)
+                    {
+                        for (int i = 0; i < N; i++)
+                        {
+                            for (int j = 0; j < N; j++)
+                            {
+                                fprintf(fp_all, "%lf\n", v[i][j]);
+                            }
+                        }
+                        fprintf(fp_times, "%lf\n", time[step]);
+                        count++;
+                    }
+
+                    // Check S1 velocity
+                    if (v[10][N-1] > 80 && tag)
+                    {
+                        printf("S1 velocity: %lf\n", ((20 - x_lim) / (time[step])));
+                        tag = false;
+                    }
+                }
+                
+                // Update step
+                #pragma omp master
+                {
+                    step++;
+                }
+                #pragma omp barrier 
+
+            }
+        }
+    }
+
     // ADI second order
-    if (strcmp(method, "ADI2") == 0)
+    else if (strcmp(method, "ADI2") == 0)
     {
         #pragma omp parallel num_threads(num_threads) default(none) \
         private(i, j, I_stim, A_v, dv_dt, dw_dt, exp_diff_term) \
@@ -287,15 +408,15 @@ int main(int argc, char *argv[])
                         // Boundary conditions
                         if (j == 1)
                         {
-                            exp_diff_term = (1.0 - phi)*v[i][j] + phi*v[i][j+1];
+                            exp_diff_term = (1.0 - (phi*0.5))*v[i][j] + (phi*0.5)*v[i][j+1];
                         }
                         else if (j == N-2)
                         {
-                            exp_diff_term = phi*v[i][j-1] + (1.0 - phi)*v[i][j];
+                            exp_diff_term = (phi*0.5)*v[i][j-1] + (1.0 - (phi*0.5))*v[i][j];
                         }
                         else
                         {
-                            exp_diff_term = phi*v[i][j-1] + (1.0 - 2.0*phi)*v[i][j] + phi*v[i][j+1];
+                            exp_diff_term = (phi*0.5)*v[i][j-1] + (1.0 - 2.0*(phi*0.5))*v[i][j] + (phi*0.5)*v[i][j+1];
                         }
 
                         // Update rightside
@@ -307,7 +428,7 @@ int main(int argc, char *argv[])
                 #pragma omp for
                 for (i = 1; i < N-1; i++)
                 {
-                    thomas_algorithm(rightside[i], solution[i], N-2, phi);
+                    thomas_algorithm(rightside[i], solution[i], N-2, (phi*0.5));
 
                     // Update v
                     for (j = 1; j < N-1; j++)
@@ -327,15 +448,15 @@ int main(int argc, char *argv[])
                         // Boundary conditions
                         if (i == 1)
                         {
-                            exp_diff_term = (1.0 - phi)*v[i][j] + phi*v[i+1][j];
+                            exp_diff_term = (1.0 - (phi*0.5))*v[i][j] + (phi*0.5)*v[i+1][j];
                         }
                         else if (i == N-2)
                         {
-                            exp_diff_term = phi*v[i-1][j] + (1.0 - phi)*v[i][j];
+                            exp_diff_term = (phi*0.5)*v[i-1][j] + (1.0 - (phi*0.5))*v[i][j];
                         }
                         else
                         {
-                            exp_diff_term = phi*v[i-1][j] + (1.0 - 2.0*phi)*v[i][j] + phi*v[i+1][j];
+                            exp_diff_term = (phi*0.5)*v[i-1][j] + (1.0 - 2.0*(phi*0.5))*v[i][j] + (phi*0.5)*v[i+1][j];
                         }
 
                         // Update rightside
@@ -344,10 +465,127 @@ int main(int argc, char *argv[])
                 }
                 
                 // Solve tridiagonal system for v
+                #pragma omp barrier
                 #pragma omp for
                 for (i = 1; i < N-1; i++)
                 {
-                    thomas_algorithm(rightside[i], v[i], N-2, phi);
+                    thomas_algorithm(rightside[i], v[i], N-2, (phi*0.5));
+                }
+
+                // Boundary conditions
+                #pragma omp for nowait
+                for (i = 0; i < N; i++)
+                {
+                    v[i][0] = v[i][1];
+                    v[i][N-1] = v[i][N-2];
+                    v[0][i] = v[1][i];
+                    v[N-1][i] = v[N-2][i];
+                }
+
+                // Save data to file
+                #pragma omp master
+                {
+                    // Write to file
+                    if (step % 20 == 0)
+                    {
+                        for (int i = 0; i < N; i++)
+                        {
+                            for (int j = 0; j < N; j++)
+                            {
+                                fprintf(fp_all, "%lf\n", v[i][j]);
+                            }
+                        }
+                        fprintf(fp_times, "%lf\n", time[step]);
+                        count++;
+                    }
+
+                    // Check S1 velocity
+                    if (v[10][N-1] > 80 && tag)
+                    {
+                        printf("S1 velocity: %lf\n", ((20 - x_lim) / (time[step])));
+                        tag = false;
+                    }
+                }
+                
+                // Update step
+                #pragma omp master
+                {
+                    step++;
+                }
+                #pragma omp barrier 
+
+            }
+        }
+    }
+
+    // Forward Euler
+    else if (strcmp(method, "FE") == 0)
+    {
+        #pragma omp parallel num_threads(num_threads) default(none) \
+        private(i, j, I_stim, A_v, dv_dt, dw_dt, exp_diff_term) \
+        shared(v, w, N, M, dx, dy, dt, G, eta1, eta2, eta3, vth, vp, ga, chi, Cm, \
+        stim_strength, t_s1_begin, stim_duration, x_lim, t_s2_begin, stim2_duration, \
+        x_max, y_max, x_min, y_min, fp_all, fp_times, time, tag, count, \
+        v_tilde, w_tilde, phi, T, tstep, step, r_v, rightside, solution)
+        {
+            while (step < M)
+            {
+                // Get time step
+                tstep = time[step];
+
+                // Predict v_tilde and w_tilde with explicit method
+                #pragma omp for collapse(2) nowait
+                for (i = 1; i < N-1; i++)
+                {
+                    for (j = 1; j < N-1; j++)
+                    {
+                        // Stimulus 1
+                        if (tstep >= t_s1_begin && tstep <= t_s1_begin + stim_duration && j <= x_lim)
+                        {
+                            I_stim = stim_strength;
+                        }
+                        // Stimulus 2
+                        else if (tstep >= t_s2_begin && tstep <= t_s2_begin + stim2_duration && j >= x_min && j <= x_max && i >= y_min && i <= y_max)
+                        {
+                            I_stim = stim_strength;
+                        }
+                        else 
+                        {
+                            I_stim = 0.0;
+                        }
+
+                        // Get A_v and dv_dt
+                        A_v = -eta1 * v[i][j] * w[i][j];
+                        dv_dt = reaction_v(v[i][j], I_stim);
+
+                        // Get dw_dt
+                        dw_dt = reaction_w(v[i][j], w[i][j]);
+                        
+                        // Update v and w
+                        v_tilde[i][j] = v[i][j] + dt * (A_v + dv_dt);
+                        w[i][j] = w[i][j] + dt * dw_dt;
+                    }
+                }
+
+                // Boundary conditions
+                #pragma omp for nowait
+                for (i = 0; i < N; i++)
+                {
+                    v_tilde[i][0] = v_tilde[i][1];
+                    v_tilde[i][N-1] = v_tilde[i][N-2];
+                    v_tilde[0][i] = v_tilde[1][i];
+                    v_tilde[N-1][i] = v_tilde[N-2][i];
+                }
+                
+                // Diffusion
+                #pragma omp barrier
+                #pragma omp for collapse(2)
+                for (i = 1; i < N-1; i++)
+                {
+                    for (j = 1; j < N-1; j++)
+                    {   
+                        v[i][j] = v_tilde[i][j] + phi * (v_tilde[i][j-1] - 2.0*v_tilde[i][j] + v_tilde[i][j+1] + v_tilde[i-1][j] - 2.0*v_tilde[i][j] + v_tilde[i+1][j]);
+                    }
                 }
 
                 // Boundary conditions
