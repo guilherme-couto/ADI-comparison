@@ -94,13 +94,13 @@ Stimulation parameters
 double stim_strength = 100.0;         
 
 double t_s1_begin = 0.0;            // Stimulation start time -> ms
-double stim_duration = 2.0;         // Stimulation duration -> ms
+double stim_duration = 1.0;         // Stimulation duration -> ms
 double s1_x_limit = 0.04;           // Stimulation x limit -> cm
 
 double t_s2_begin = 122.0;            // Stimulation start time -> ms
-double stim2_duration = 3.0;        // Stimulation duration -> ms
-double s2_x_max = 0.4;              // Stimulation x max -> cm
-double s2_y_max = 0.2;              // Stimulation y limit -> cm
+double stim2_duration = 1.0;        // Stimulation duration -> ms
+double s2_x_max = 1.0;              // Stimulation x max -> cm
+double s2_y_max = 1.0;              // Stimulation y limit -> cm
 double s2_x_min = 0.0;              // Stimulation x min -> cm
 double s2_y_min = 0.0;              // Stimulation y min -> cm
 
@@ -454,7 +454,7 @@ int main(int argc, char *argv[])
                         }
 
                         // Update rightside
-                        rightside[i][j] = exp_diff_term + 0.5 * dt * r_v[i][j];
+                        rightside[i][j] = exp_diff_term + r_v[i][j];
                     }
                 }
                 
