@@ -14,7 +14,7 @@ dt = sys.argv[2]
 # Read data from files
 
 t = []
-timesfile = f'sim-times-{method}-{dt}.txt'
+timesfile = f'./simulation-files/sim-times-{method}-{dt}.txt'
 with open(timesfile, 'r') as f:
     lines = f.readlines()
     for line in lines:
@@ -22,7 +22,7 @@ with open(timesfile, 'r') as f:
 
 totalframes = len(t)
 
-filename = f'fhn-{method}-{dt}.txt'
+filename = f'./simulation-files/fhn-{method}-{dt}.txt'
 U = np.zeros((totalframes, 100, 100))
 with open(filename, 'r') as f:
     for n in range(totalframes):
@@ -49,7 +49,7 @@ for n in range(len(U)):
         plt.close()
 
 # Build gif
-with imageio.v2.get_writer(f'gif-{method}-{dt}.gif', mode='I') as writer:
+with imageio.v2.get_writer(f'./gif/gif-{method}-{dt}.gif', mode='I') as writer:
     for plot in plots:
         image = imageio.v2.imread(plot)
         writer.append_data(image)

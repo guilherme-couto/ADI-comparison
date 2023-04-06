@@ -94,11 +94,11 @@ Stimulation parameters
 double stim_strength = 100.0;         
 
 double t_s1_begin = 0.0;            // Stimulation start time -> ms
-double stim_duration = 1.0;         // Stimulation duration -> ms
+double stim_duration = 0.6;         // Stimulation duration -> ms
 double s1_x_limit = 0.04;           // Stimulation x limit -> cm
 
 double t_s2_begin = 122.0;            // Stimulation start time -> ms
-double stim2_duration = 1.0;        // Stimulation duration -> ms
+double stim2_duration = 0.6;        // Stimulation duration -> ms
 double s2_x_max = 1.0;              // Stimulation x max -> cm
 double s2_y_max = 1.0;              // Stimulation y limit -> cm
 double s2_x_min = 0.0;              // Stimulation x min -> cm
@@ -195,7 +195,7 @@ int main(int argc, char *argv[])
     sprintf(s_dt, "%.03f", dt);
 
     // Open the file to write for complete gif
-    char fname_complete[100] = "fhn-";
+    char fname_complete[100] = "./simulation-files/fhn-";
     strcat(fname_complete, method);
     strcat(fname_complete, "-");
     strcat(fname_complete, s_dt);
@@ -205,7 +205,7 @@ int main(int argc, char *argv[])
     int count = 0;
 
     // Open the file to write for times
-    char fname_times[100] = "sim-times-";
+    char fname_times[100] = "./simulation-files/sim-times-";
     strcat(fname_times, method);
     strcat(fname_times, "-");
     strcat(fname_times, s_dt);
@@ -215,6 +215,7 @@ int main(int argc, char *argv[])
 
     // For velocity
     bool tag = true;
+    double velocity = 0.0;
     
     // Start timer
     double start, finish, elapsed = 0.0;
@@ -229,7 +230,7 @@ int main(int argc, char *argv[])
         shared(v, w, N, M, dx, dy, dt, G, eta1, eta2, eta3, vth, vp, ga, chi, Cm, \
         stim_strength, t_s1_begin, stim_duration, x_lim, t_s2_begin, stim2_duration, \
         x_max, y_max, x_min, y_min, fp_all, fp_times, time, tag, count, \
-        v_tilde, w_tilde, phi, T, tstep, step, r_v, rightside, solution)
+        v_tilde, w_tilde, phi, T, tstep, step, r_v, rightside, solution, velocity)
         {
             while (step < M)
             {
@@ -307,7 +308,7 @@ int main(int argc, char *argv[])
                 #pragma omp master
                 {
                     // Write to file
-                    if (step % 20 == 0)
+                    /* if (step % 20 == 0)
                     {
                         for (int i = 0; i < N; i++)
                         {
@@ -318,12 +319,13 @@ int main(int argc, char *argv[])
                         }
                         fprintf(fp_times, "%lf\n", time[step]);
                         count++;
-                    }
+                    } */
 
                     // Check S1 velocity
                     if (v[10][N-1] > 80 && tag)
                     {
-                        printf("S1 velocity: %lf\n", ((20 - x_lim) / (time[step])));
+                        velocity = ((20 - x_lim) / (time[step]));
+                        printf("S1 velocity: %lf\n", velocity);
                         tag = false;
                     }
                 }
@@ -347,7 +349,7 @@ int main(int argc, char *argv[])
         shared(v, w, N, M, dx, dy, dt, G, eta1, eta2, eta3, vth, vp, ga, chi, Cm, \
         stim_strength, t_s1_begin, stim_duration, x_lim, t_s2_begin, stim2_duration, \
         x_max, y_max, x_min, y_min, fp_all, fp_times, time, tag, count, \
-        v_tilde, w_tilde, phi, T, tstep, step, r_v, rightside, solution)
+        v_tilde, w_tilde, phi, T, tstep, step, r_v, rightside, solution, velocity)
         {
             while (step < M)
             {
@@ -384,7 +386,7 @@ int main(int argc, char *argv[])
                         w_tilde[i][j] = w[i][j] + (dt * 0.5) * dw_dt;
 
                         // Update w
-                        w[i][j] = w[i][j] + dt * reaction_w(v_tilde[i][j], w_tilde[i][j]);      // ??? usa v_tilde ou vij?
+                        w[i][j] = w[i][j] + dt * reaction_w(v_tilde[i][j], w_tilde[i][j]);
 
                         // Update r_v for Thomas algorithm
                         r_v[i][j] = 0.5 * dt * (reaction_v(v_tilde[i][j], w_tilde[i][j]) + I_stim);
@@ -480,7 +482,7 @@ int main(int argc, char *argv[])
                 #pragma omp master
                 {
                     // Write to file
-                    if (step % 20 == 0)
+                    /* if (step % 20 == 0)
                     {
                         for (int i = 0; i < N; i++)
                         {
@@ -491,12 +493,13 @@ int main(int argc, char *argv[])
                         }
                         fprintf(fp_times, "%lf\n", time[step]);
                         count++;
-                    }
+                    } */
 
                     // Check S1 velocity
                     if (v[10][N-1] > 80 && tag)
                     {
-                        printf("S1 velocity: %lf\n", ((20 - x_lim) / (time[step])));
+                        velocity = ((20 - x_lim) / (time[step]));
+                        printf("S1 velocity: %lf\n", velocity);
                         tag = false;
                     }
                 }
@@ -520,7 +523,7 @@ int main(int argc, char *argv[])
         shared(v, w, N, M, dx, dy, dt, G, eta1, eta2, eta3, vth, vp, ga, chi, Cm, \
         stim_strength, t_s1_begin, stim_duration, x_lim, t_s2_begin, stim2_duration, \
         x_max, y_max, x_min, y_min, fp_all, fp_times, time, tag, count, \
-        v_tilde, w_tilde, phi, T, tstep, step, r_v, rightside, solution)
+        v_tilde, w_tilde, phi, T, tstep, step, r_v, rightside, solution, velocity)
         {
             while (step < M)
             {
@@ -593,7 +596,7 @@ int main(int argc, char *argv[])
                 #pragma omp master
                 {
                     // Write to file
-                    if (step % 20 == 0)
+                    /* if (step % 20 == 0)
                     {
                         for (int i = 0; i < N; i++)
                         {
@@ -604,12 +607,13 @@ int main(int argc, char *argv[])
                         }
                         fprintf(fp_times, "%lf\n", time[step]);
                         count++;
-                    }
+                    } */
 
                     // Check S1 velocity
                     if (v[10][N-1] > 80 && tag)
                     {
-                        printf("S1 velocity: %lf\n", ((20 - x_lim) / (time[step])));
+                        velocity = ((20 - x_lim) / (time[step]));
+                        printf("S1 velocity: %lf\n", velocity);
                         tag = false;
                     }
                 }
@@ -631,9 +635,15 @@ int main(int argc, char *argv[])
 
     printf("\nElapsed time = %e seconds\n", elapsed); printf("Total steps: %d\n", step);
 
+    // Comparison file
+    FILE *fp_comp = NULL;
+    fp_comp = fopen("comparison.txt", "a");
+    fprintf(fp_comp, "%s\t\t| %d\t| %.3f\t| S1 vel = %lf m/s\t| %e\n", method, num_threads, dt, velocity, elapsed);
+
     // Close files
     fclose(fp_all);
     fclose(fp_times);
+    fclose(fp_comp);
     
     // Free alocated memory
     free(time);
