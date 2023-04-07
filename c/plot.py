@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import sys
 import os
 import imageio.v2
+import math
 
 if len(sys.argv) != 3:
     print('Usage: python3 plot.py <method> <dt>')
@@ -32,7 +33,7 @@ with open(filename, 'r') as f:
 
 
 # Make plots
-framerate = int(totalframes / 100)
+framerate = math.ceil(totalframes / 100)
 plots = []
 for n in range(len(U)):
     if n % framerate == 0:
