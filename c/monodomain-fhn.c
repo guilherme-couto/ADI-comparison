@@ -405,7 +405,7 @@ int main(int argc, char *argv[])
                     }
 
                     // Check S1 velocity
-                    if (v[10][N-1] > 80 && tag)
+                    if (v[0][N-1] > 80 && tag)
                     {
                         velocity = ((10*(L - s1_x_limit)) / (time[step]));
                         printf("S1 velocity: %lf\n", velocity);
@@ -547,7 +547,7 @@ int main(int argc, char *argv[])
                     }
 
                     // Check S1 velocity
-                    if (v[10][N-1] > 80 && tag)
+                    if (v[0][N-1] > 80 && tag)
                     {
                         velocity = ((10*(L - s1_x_limit)) / (time[step]));
                         printf("S1 velocity: %lf\n", velocity);
@@ -660,7 +660,7 @@ int main(int argc, char *argv[])
                     }
 
                     // Check S1 velocity
-                    if (v[10][N-1] > 80 && tag)
+                    if (v[0][N-1] > 80 && tag)
                     {
                         velocity = ((10*(L - s1_x_limit)) / (time[step]));
                         printf("S1 velocity: %lf\n", velocity);
@@ -683,7 +683,7 @@ int main(int argc, char *argv[])
     finish = omp_get_wtime();
     elapsed = finish - start;
 
-    printf("\nElapsed time = %e seconds\n", elapsed); printf("Total steps: %d\n", step);
+    printf("\nElapsed time = %e seconds\n", elapsed);
 
     // Comparison file
     FILE *fp_comp = NULL;
