@@ -166,7 +166,7 @@ Simulation parameters
 int L = 2;              // Length of each side (cm)
 double dx = 0.02;       // Spatial step -> cm
 double dy = 0.02;       // Spatial step -> cm
-double T = 400.0;         // Simulation time -> ms
+double T = 400.0;       // Simulation time -> ms
 
 
 /*-----------------------------------------------------
@@ -176,9 +176,9 @@ double stim_strength = 100.0;
 
 double t_s1_begin = 0.0;            // Stimulation start time -> ms
 double stim_duration = 1.0;         // Stimulation duration -> ms
-double s1_x_limit = 0.2;           // Stimulation x limit -> cm
+double s1_x_limit = 0.2;            // Stimulation x limit -> cm
 
-double t_s2_begin = 120.0;            // Stimulation start time -> ms
+double t_s2_begin = 120.0;          // Stimulation start time -> ms
 double stim2_duration = 3.0;        // Stimulation duration -> ms
 double s2_x_max = 1.0;              // Stimulation x max -> cm
 double s2_y_max = 1.0;              // Stimulation y limit -> cm
@@ -213,8 +213,8 @@ int main(int argc, char *argv[])
     }
 
     // Number of steps
-    int N = (int)(L / dx);          // Number of spatial steps (square tissue)
-    int M = (int)(T / dt);     // Number of time steps
+    int N = (int)(L / dx);  // Number of spatial steps (square tissue)
+    int M = (int)(T / dt);  // Number of time steps
 
     // Variables
     double **v, **w, **v_tilde, **w_tilde, **r_v, **rightside, **solution;
@@ -241,7 +241,7 @@ int main(int argc, char *argv[])
     int step = 0;
     double tstep = 0.0;
     double *time = (double *)malloc(M * sizeof(double));
-    int n;        // Time index
+    int n;  // Time index
     for (n = 0; n < M; n++)
     {
         time[n] = n * dt;
@@ -258,7 +258,7 @@ int main(int argc, char *argv[])
     double phi = D * dt / (dx * dx);        // For Thomas algorithm - isotropic
 
     // Initial conditions
-    int i, j;                       // Spatial indexes i for y-axis and j for x-axis
+    int i, j;                               // Spatial indexes i for y-axis and j for x-axis
     for (i = 0; i < N; i++)
     {
         for (j = 0; j < N; j++)
@@ -581,7 +581,6 @@ int main(int argc, char *argv[])
                 // Get time step
                 tstep = time[step];
 
-                // Predict v_tilde and w_tilde with explicit method
                 #pragma omp for collapse(2)
                 for (i = 1; i < N-1; i++)
                 {
