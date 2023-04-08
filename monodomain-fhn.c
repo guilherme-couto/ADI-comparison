@@ -38,12 +38,8 @@ double reaction_w(double v, double w)
     return eta2 * ((v / vp) - (eta3 * w));
 }
 
-void thomas_algorithm(double *d, double *solution, unsigned long N, double alpha)
+void thomas_algorithm(double *d, double *solution, unsigned long N, double alpha, double *c_, double *d_)
 {
-    // Auxiliary arrays
-    double *c_ = (double *)malloc((N - 1) * sizeof(double));
-    double *d_ = (double *)malloc((N) * sizeof(double));
-
     // Coefficients
     double a = -alpha;    // subdiagonal
     double b = 1 + alpha; // diagonal (1st and last row)
@@ -71,19 +67,11 @@ void thomas_algorithm(double *d, double *solution, unsigned long N, double alpha
     {
         solution[i + 1] = d_[i] - c_[i] * solution[i + 2];
     }
-
-    // Free memory
-    free(c_);
-    free(d_);
 }
 
 // Adapted for 2nd order approximation
-void thomas_algorithm_2nd(double *d, double *solution, unsigned long N, double alpha)
+void thomas_algorithm_2nd(double *d, double *solution, unsigned long N, double alpha, double *c_, double *d_)
 {   
-    // Auxiliary arrays
-    double *c_ = (double *)malloc((N - 1) * sizeof(double));
-    double *d_ = (double *)malloc((N) * sizeof(double));
-
     // Coefficients
     double a = -alpha;    // subdiagonal
     double b = 1 + 2 * alpha; // diagonal (1st and last row)
@@ -113,10 +101,6 @@ void thomas_algorithm_2nd(double *d, double *solution, unsigned long N, double a
     {
         solution[i] = d_[i] - c_[i] * solution[i + 1];
     }
-    
-    // Free memory
-    free(c_);
-    free(d_);
 }
 
 // Adapted for 2nd order approximation
@@ -225,6 +209,10 @@ int main(int argc, char *argv[])
     r_v = (double **)malloc(N * sizeof(double *));
     rightside = (double **)malloc(N * sizeof(double *));
     solution = (double **)malloc(N * sizeof(double *));
+
+    // Auxiliary arrays for Thomas algorithm 2nd order
+    double **c_ = (double **)malloc((N) * sizeof(double *));
+    double **d_ = (double **)malloc((N) * sizeof(double *));
     for (int i = 0; i < N; i++)
     {
         v[i] = (double *)malloc(N * sizeof(double));
@@ -234,6 +222,8 @@ int main(int argc, char *argv[])
         r_v[i] = (double *)malloc(N * sizeof(double));
         rightside[i] = (double *)malloc(N * sizeof(double));
         solution[i] = (double *)malloc(N * sizeof(double));
+        c_[i] = (double *)malloc(N * sizeof(double));
+        d_[i] = (double *)malloc(N * sizeof(double));
     }
 
     double dv_dt, dw_dt, diff_term = 0.0;
@@ -279,7 +269,7 @@ int main(int argc, char *argv[])
     sprintf(s_dt, "%.03f", dt);
 
     // Open the file to write for complete gif
-    char fname_complete[100] = "./simulation-files/fhn-";
+    /* char fname_complete[100] = "./simulation-files/fhn-";
     strcat(fname_complete, method);
     strcat(fname_complete, "-");
     strcat(fname_complete, s_dt);
@@ -299,10 +289,12 @@ int main(int argc, char *argv[])
 
     // For velocity
     bool tag = true;
-    double velocity = 0.0;
+    double velocity = 0.0; */
     
-    // Start timer
+    // Timer
     double start, finish, elapsed = 0.0;
+    double start_ode, finish_ode, elapsed_ode = 0.0;
+    double start_pde, finish_pde, elapsed_pde = 0.0;
 
     start = omp_get_wtime();
 
@@ -311,15 +303,20 @@ int main(int argc, char *argv[])
     {
         #pragma omp parallel num_threads(num_threads) default(none) \
         private(i, j, I_stim, dv_dt, dw_dt, diff_term) \
-        shared(v, w, N, M, dx, dy, dt, G, eta1, eta2, eta3, vth, vp, ga, chi, Cm, L, s1_x_limit, \
-        stim_strength, t_s1_begin, stim_duration, x_lim, t_s2_begin, stim2_duration, \
-        x_max, y_max, x_min, y_min, fp_all, fp_times, time, tag, save_rate, \
-        v_tilde, w_tilde, phi, T, tstep, step, r_v, rightside, solution, velocity)
+        shared(v, w, N, M, dt, L, s1_x_limit, stim_strength, t_s1_begin, stim_duration, x_lim, t_s2_begin, stim2_duration, \
+        x_max, y_max, x_min, y_min,  time,  c_, d_, v_tilde, w_tilde, phi, T, tstep, step, \
+        r_v, rightside, solution,  start_ode, finish_ode, elapsed_ode, start_pde, finish_pde, elapsed_pde)
         {
             while (step < M)
             {
                 // Get time step
                 tstep = time[step];
+
+                // Start ode timer
+                #pragma omp master
+                {
+                    start_ode = omp_get_wtime();
+                }
 
                 // Predict v_tilde and w_tilde with explicit method
                 #pragma omp for collapse(2) nowait
@@ -354,6 +351,14 @@ int main(int argc, char *argv[])
                         rightside[j][i] = v_tilde[i][j];
                     }
                 }
+
+                // Finish ode timer and start pde timer
+                #pragma omp master
+                {
+                    finish_ode = omp_get_wtime();
+                    elapsed_ode += finish_ode - start_ode;
+                    start_pde = omp_get_wtime();
+                }
                 
                 // Diffusion
                 // 1st: Implicit y-axis diffusion (lines)
@@ -361,7 +366,7 @@ int main(int argc, char *argv[])
                 #pragma omp for nowait
                 for (i = 1; i < N-1; i++)
                 {
-                    thomas_algorithm(rightside[i], solution[i], N-2, phi);
+                    thomas_algorithm(rightside[i], solution[i], N-2, phi, c_[i], d_[i]);
 
                     // Update v
                     for (j = 1; j < N-1; j++)
@@ -375,7 +380,14 @@ int main(int argc, char *argv[])
                 #pragma omp for nowait
                 for (i = 1; i < N-1; i++)
                 {
-                    thomas_algorithm(v_tilde[i], v[i], N-2, phi);
+                    thomas_algorithm(v_tilde[i], v[i], N-2, phi, c_[i], d_[i]);
+                }
+
+                // Finish pde timer
+                #pragma omp master
+                {
+                    finish_pde = omp_get_wtime();
+                    elapsed_pde += finish_pde - start_pde;
                 }
 
                 // Boundary conditions
@@ -389,7 +401,7 @@ int main(int argc, char *argv[])
                 }
 
                 // Save data to file
-                #pragma omp master
+                /* #pragma omp master
                 {
                     // Write to file
                     if (step % save_rate == 0)
@@ -411,7 +423,7 @@ int main(int argc, char *argv[])
                         printf("S1 velocity: %lf\n", velocity);
                         tag = false;
                     }
-                }
+                } */
                 
                 // Update step
                 #pragma omp master
@@ -429,15 +441,20 @@ int main(int argc, char *argv[])
     {
         #pragma omp parallel num_threads(num_threads) default(none) \
         private(i, j, I_stim, dv_dt, dw_dt, diff_term) \
-        shared(v, w, N, M, dx, dy, dt, G, eta1, eta2, eta3, vth, vp, ga, chi, Cm, L, s1_x_limit, \
-        stim_strength, t_s1_begin, stim_duration, x_lim, t_s2_begin, stim2_duration, \
-        x_max, y_max, x_min, y_min, fp_all, fp_times, time, tag, save_rate, \
-        v_tilde, w_tilde, phi, T, tstep, step, r_v, rightside, solution, velocity)
+        shared(v, w, N, M, dt, L, s1_x_limit, stim_strength, t_s1_begin, stim_duration, x_lim, t_s2_begin, stim2_duration, \
+        x_max, y_max, x_min, y_min,  time,  c_, d_, v_tilde, w_tilde, phi, T, tstep, step, \
+        r_v, rightside, solution,  start_ode, finish_ode, elapsed_ode, start_pde, finish_pde, elapsed_pde)
         {
             while (step < M)
             {
                 // Get time step
                 tstep = time[step];
+
+                // Start ode timer
+                #pragma omp master
+                {
+                    start_ode = omp_get_wtime();
+                }
 
                 // Predict v_tilde and w_tilde with explicit method
                 #pragma omp for collapse(2)
@@ -477,6 +494,13 @@ int main(int argc, char *argv[])
                         w[i][j] = w[i][j] + dt * dw_dt;
                     }
                 }
+
+                // Finish ode timer
+                #pragma omp master
+                {
+                    finish_ode = omp_get_wtime();
+                    elapsed_ode += finish_ode - start_ode;
+                }
                 
                 // Update rightside for Thomas algorithm
                 #pragma omp barrier
@@ -494,17 +518,30 @@ int main(int argc, char *argv[])
                     }
                 }
 
+                // Start pde timer
+                #pragma omp master
+                {
+                    start_pde = omp_get_wtime();
+                }
+
                 // Solve tridiagonal system for v
                 #pragma omp for nowait
                 for (i = 0; i < N; i++)
                 {
-                    thomas_algorithm_2nd(rightside[i], solution[i], N, (phi*0.5));
+                    thomas_algorithm_2nd(rightside[i], solution[i], N, (phi*0.5), c_[i], d_[i]);
                     
                     // Update v
                     for (j = 0; j < N; j++)
                     {
                         v[j][i] = solution[i][j];
                     }
+                }
+
+                // Finish pde timer
+                #pragma omp master
+                {
+                    finish_pde = omp_get_wtime();
+                    elapsed_pde += finish_pde - start_pde;
                 }
                 
                 // Update rightside for Thomas algorithm
@@ -522,16 +559,29 @@ int main(int argc, char *argv[])
                         rightside[i][j] = diff_term + r_v[i][j];
                     }
                 }
+
+                // Start pde timer
+                #pragma omp master
+                {
+                    start_pde = omp_get_wtime();
+                }
                 
                 // Solve tridiagonal system for v
                 #pragma omp for nowait
                 for (i = 0; i < N; i++)
                 {
-                    thomas_algorithm_2nd(rightside[i], v[i], N, (phi*0.5));
+                    thomas_algorithm_2nd(rightside[i], v[i], N, (phi*0.5), c_[i], d_[i]);
+                }
+
+                // Finish pde timer
+                #pragma omp master
+                {
+                    finish_pde = omp_get_wtime();
+                    elapsed_pde += finish_pde - start_pde;
                 }
 
                 // Save data to file
-                #pragma omp master
+                /* #pragma omp master
                 {
                     // Write to file
                     if (step % save_rate == 0)
@@ -553,7 +603,7 @@ int main(int argc, char *argv[])
                         printf("S1 velocity: %lf\n", velocity);
                         tag = false;
                     }
-                }
+                } */
                 
                 // Update step
                 #pragma omp master
@@ -571,15 +621,20 @@ int main(int argc, char *argv[])
     {
         #pragma omp parallel num_threads(num_threads) default(none) \
         private(i, j, I_stim, dv_dt, dw_dt, diff_term) \
-        shared(v, w, N, M, dx, dy, dt, G, eta1, eta2, eta3, vth, vp, ga, chi, Cm, L, s1_x_limit, \
-        stim_strength, t_s1_begin, stim_duration, x_lim, t_s2_begin, stim2_duration, \
-        x_max, y_max, x_min, y_min, fp_all, fp_times, time, tag, save_rate, \
-        v_tilde, w_tilde, phi, T, tstep, step, r_v, rightside, solution, velocity)
+        shared(v, w, N, M, dt, L, s1_x_limit, stim_strength, t_s1_begin, stim_duration, x_lim, t_s2_begin, stim2_duration, \
+        x_max, y_max, x_min, y_min,  time,  c_, d_, v_tilde, w_tilde, phi, T, tstep, step, \
+        r_v, rightside, solution,  start_ode, finish_ode, elapsed_ode, start_pde, finish_pde, elapsed_pde)
         {
             while (step < M)
             {
                 // Get time step
                 tstep = time[step];
+
+                // Start ode timer
+                #pragma omp master
+                {
+                    start_ode = omp_get_wtime();
+                }
 
                 #pragma omp for collapse(2)
                 for (i = 1; i < N-1; i++)
@@ -611,6 +666,13 @@ int main(int argc, char *argv[])
                     }
                 }
 
+                // Finish ode timer
+                #pragma omp master
+                {
+                    finish_ode = omp_get_wtime();
+                    elapsed_ode += finish_ode - start_ode;
+                }
+
                 // Boundary conditions
                 #pragma omp for
                 for (i = 0; i < N; i++)
@@ -620,6 +682,12 @@ int main(int argc, char *argv[])
                     v_tilde[0][i] = v_tilde[1][i];
                     v_tilde[N-1][i] = v_tilde[N-2][i];
                 }
+
+                // Start pde timer
+                #pragma omp master
+                {
+                    start_pde = omp_get_wtime();
+                }
                 
                 // Diffusion
                 #pragma omp barrier
@@ -628,8 +696,16 @@ int main(int argc, char *argv[])
                 {
                     for (j = 1; j < N-1; j++)
                     {   
-                        v[i][j] = v_tilde[i][j] + phi * (v_tilde[i][j-1] - 2.0*v_tilde[i][j] + v_tilde[i][j+1] + v_tilde[i-1][j] - 2.0*v_tilde[i][j] + v_tilde[i+1][j]);
+                        v[i][j] = v_tilde[i][j] + phi * (v_tilde[i-1][j] - 2.0*v_tilde[i][j] + v_tilde[i+1][j]);
+                        v[i][j] += phi * (v_tilde[i][j-1] - 2.0*v_tilde[i][j] + v_tilde[i][j+1]);
                     }
+                }
+
+                // Finish pde timer
+                #pragma omp master
+                {
+                    finish_pde = omp_get_wtime();
+                    elapsed_pde += finish_pde - start_pde;
                 }
 
                 // Boundary conditions
@@ -643,7 +719,7 @@ int main(int argc, char *argv[])
                 }
 
                 // Save data to file
-                #pragma omp master
+                /* #pragma omp master
                 {
                     // Write to file
                     if (step % save_rate == 0)
@@ -665,7 +741,7 @@ int main(int argc, char *argv[])
                         printf("S1 velocity: %lf\n", velocity);
                         tag = false;
                     }
-                }
+                } */
                 
                 // Update step
                 #pragma omp master
@@ -685,14 +761,20 @@ int main(int argc, char *argv[])
     printf("\nElapsed time = %e seconds\n", elapsed);
 
     // Comparison file
-    FILE *fp_comp = NULL;
+    /* FILE *fp_comp = NULL;
     fp_comp = fopen("comparison.txt", "a");
-    fprintf(fp_comp, "%s  \t|\t%d threads\t|\t%.3f ms\t|\t%lf m/s\t|\t%e seconds\n", method, num_threads, dt, velocity, elapsed);
+    fprintf(fp_comp, "%s  \t|\t%d threads\t|\t%.3f ms\t|\t%lf m/s\t|\t%e seconds\n", method, num_threads, dt, velocity, elapsed); */
+
+    // ODE/PDE times file
+    FILE *fp_all_times = NULL;
+    fp_all_times = fopen("times.txt", "a");
+    fprintf(fp_all_times, "%s  \t|\t%d threads\t|\t%.3f ms\t|\t%e seconds\t|\t%e seconds\t|\t%e seconds\n", method, num_threads, dt, elapsed_ode, elapsed_pde, elapsed);
 
     // Close files
-    fclose(fp_all);
-    fclose(fp_times);
-    fclose(fp_comp);
+    // fclose(fp_all);
+    // fclose(fp_times);
+    // fclose(fp_comp);
+    fclose(fp_all_times);
     
     // Free alocated memory
     free(time);
@@ -703,6 +785,8 @@ int main(int argc, char *argv[])
     free(r_v);
     free(rightside);
     free(solution);
+    free(c_);
+    free(d_);
 
     return 0;
 }
