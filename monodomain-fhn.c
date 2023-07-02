@@ -150,7 +150,7 @@ Simulation parameters
 int L = 2;              // Length of each side (cm)
 double dx = 0.02;       // Spatial step -> cm
 double dy = 0.02;       // Spatial step -> cm
-double T = 400.0;       // Simulation time -> ms
+double T = 300.0;       // Simulation time -> ms
 
 
 /*-----------------------------------------------------
@@ -162,7 +162,7 @@ double t_s1_begin = 0.0;            // Stimulation start time -> ms
 double stim_duration = 1.0;         // Stimulation duration -> ms
 double s1_x_limit = 0.2;            // Stimulation x limit -> cm
 
-double t_s2_begin = 120.0;          // Stimulation start time -> ms
+double t_s2_begin = 135.0;          // Stimulation start time -> ms
 double stim2_duration = 3.0;        // Stimulation duration -> ms
 double s2_x_max = 1.0;              // Stimulation x max -> cm
 double s2_y_max = 1.0;              // Stimulation y limit -> cm
@@ -192,7 +192,7 @@ int main(int argc, char *argv[])
     }
     if (strcmp(method, "ADI1") != 0 && strcmp(method, "ADI2") != 0 && strcmp(method, "FE") != 0)
     {
-        fprintf(stderr, "Method must be ADI1 (first order) or ADI2 (second order)\n");
+        fprintf(stderr, "Method must be ADI1 (first order) or ADI2 (second order) or FE (forward Euler)\n");
         exit(1);
     }
 
@@ -264,32 +264,28 @@ int main(int argc, char *argv[])
     }
 
     // Prepare files to save data
+    system("mkdir -p simulation-files");
+
     // Convert dt to string
     char s_dt[10];
     sprintf(s_dt, "%.03f", dt);
 
     // Open the file to write for complete gif
-    /* char fname_complete[100] = "./simulation-files/fhn-";
-    strcat(fname_complete, method);
-    strcat(fname_complete, "-");
-    strcat(fname_complete, s_dt);
-    strcat(fname_complete, ".txt");
+    char fname_complete[100] = "./simulation-files/fhn-";
+    sprintf(fname_complete, "./simulation-files/fhn-%s-%s.txt", method, s_dt);
     FILE *fp_all = NULL;
     fp_all = fopen(fname_complete, "w");
     int save_rate = ceil(M / 100.0);
 
     // Open the file to write for times
     char fname_times[100] = "./simulation-files/sim-times-";
-    strcat(fname_times, method);
-    strcat(fname_times, "-");
-    strcat(fname_times, s_dt);
-    strcat(fname_times, ".txt");
+    sprintf(fname_times, "./simulation-files/sim-times-%s-%s.txt", method, s_dt);
     FILE *fp_times = NULL;
     fp_times = fopen(fname_times, "w");
 
     // For velocity
     bool tag = true;
-    double velocity = 0.0; */
+    double velocity = 0.0;
     
     // Timer
     double start, finish, elapsed = 0.0;
@@ -623,6 +619,7 @@ int main(int argc, char *argv[])
         private(i, j, I_stim, dv_dt, dw_dt, diff_term) \
         shared(v, w, N, M, dt, L, s1_x_limit, stim_strength, t_s1_begin, stim_duration, x_lim, t_s2_begin, stim2_duration, \
         x_max, y_max, x_min, y_min,  time,  c_, d_, v_tilde, w_tilde, phi, T, tstep, step, \
+        velocity, tag, save_rate, fp_all, fp_times, \
         r_v, rightside, solution,  start_ode, finish_ode, elapsed_ode, start_pde, finish_pde, elapsed_pde)
         {
             while (step < M)
@@ -719,7 +716,7 @@ int main(int argc, char *argv[])
                 }
 
                 // Save data to file
-                /* #pragma omp master
+                #pragma omp master
                 {
                     // Write to file
                     if (step % save_rate == 0)
@@ -741,7 +738,7 @@ int main(int argc, char *argv[])
                         printf("S1 velocity: %lf\n", velocity);
                         tag = false;
                     }
-                } */
+                }
                 
                 // Update step
                 #pragma omp master
